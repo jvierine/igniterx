@@ -1,0 +1,6 @@
+node_modules/
+dist/
+physics/target/
+src/physics.wasm
+*.log
+.DS_Store

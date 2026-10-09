@@ -1,0 +1,11 @@
+{
+  "name": "igniterx", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {
+    "build:physics": "bash scripts/build-physics.sh",
+    "build": "npm run build:physics && tsc --noEmit && vite build",
+    "test": "cargo test --manifest-path physics/Cargo.toml && node --test scripts/wasm.test.mjs",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "dependencies": { "three": "0.180.0" },
+  "devDependencies": { "@types/three": "0.180.0", "typescript": "5.9.3", "vite": "7.1.9" }
+}
