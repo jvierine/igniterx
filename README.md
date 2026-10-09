@@ -13,7 +13,7 @@ A Rust/WebAssembly flight and RF simulation with a Three.js WebGL viewer for Ign
 - Three equally fed axial half-wave dipoles at 120° intervals around the cone, with adjustable chord spacing, roll, and total radiated power (25 mW default).
 - Friis link budget including directional Tx and Rx gains, polarization mismatch, feed loss, kTB noise, LoRa SNR thresholds, and demodulation reserve.
 - LoRa nominal coded PHY rate from 18.3 b/s to 37.5 kb/s; automatic SF6–12 / 7.8–500 kHz mode selection at CR 4/5.
-- Rocket cone and elevated ground-array close-ups, antenna surfaces, elevation and azimuth cuts, full angular gain maps, finite-width −3 dB array and fixed single-patch beam volumes, margin along the flight, time-weighted average and sampled worst case, CSV export, shareable parameter URLs.
+- Rocket cone and elevated ground-array close-ups, antenna surfaces, elevation and azimuth cuts, full angular gain maps, finite-width −3 dB array and fixed single-patch beam volumes, margin along the flight, time-weighted average and sampled worst case, CSV export.
 
 ## Build directly on juha.no
 
