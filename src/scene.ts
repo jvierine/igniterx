@@ -10,12 +10,12 @@ function mountRenderer(host:HTMLElement){const renderer=new T.WebGLRenderer({ant
 export class Mission {
   scene=new T.Scene();camera=new T.PerspectiveCamera(43,1,0.01,60);renderer:T.WebGLRenderer;controls:OrbitControls;
   dynamic=new T.Group();rocket=new T.Group();array=new T.Group();beam!:T.Line;reference!:T.Line;
-  arrayBeam=new T.Group();singleBeam=new T.Group();beamWidth=0;beamStamp=0;
+  txBeam=new T.Group();arrayBeam=new T.Group();singleBeam=new T.Group();beamWidth=0;beamStamp=0;
   rx=new T.Vector3();normal=new T.Vector3();lobe=new T.Group();trajectory?:T.Line;labels:{el:HTMLDivElement,pos:T.Vector3}[]=[];
   m!:Model;p!:Parameters;selected=0.3;displayLobe=false;fpsActive=true;lastLobe=0;
   constructor(public host:HTMLElement,onScrub:(f:number)=>void){
     this.renderer=mountRenderer(host);this.scene.fog=new T.FogExp2(0x0a151d,0.045);this.scene.add(new T.AmbientLight(0xc2e4ed,1.5));const sun=new T.DirectionalLight(0xffffff,3);sun.position.set(2,6,3);this.scene.add(sun);
-    this.scene.add(this.dynamic,this.rocket,this.array,this.lobe,this.arrayBeam,this.singleBeam);
+    this.scene.add(this.dynamic,this.rocket,this.array,this.lobe,this.arrayBeam,this.singleBeam,this.txBeam);
     this.camera.position.set(5.8,4.1,6.4);this.controls=new OrbitControls(this.camera,this.renderer.domElement);this.controls.target.set(0.6,1.2,0);this.controls.enableDamping=true;this.controls.minDistance=0.4;this.controls.maxDistance=25;this.controls.maxPolarAngle=Math.PI/2+0.2;
     this.terrain();this.makeRocket();
     new ResizeObserver(()=>this.resize()).observe(host);
@@ -59,15 +59,16 @@ export class Mission {
     const height=this.array.position.y;const mast=mesh(new T.CylinderGeometry(.009,.009,height,12),0x7294a0);mast.position.copy(this.array.position).setY(height/2);this.dynamic.add(mast);
     const base=mesh(new T.CylinderGeometry(.06,.075,.014,24),0x3e626e);base.position.copy(this.rx).setY(.007);this.dynamic.add(base);
     for(const ray of [this.beam,this.reference]){const a=ray.geometry.getAttribute('position');a.setXYZ(0,this.array.position.x,height,this.array.position.z);a.needsUpdate=true;ray.geometry.computeBoundingSphere();}this.beam.visible=false;
-    this.buildSingleBeam();this.buildArrayBeam();
+    this.buildSingleBeam();this.buildArrayBeam();this.buildTxBeam();
     const find=(kind:string)=>this.labels.find(l=>l.el.classList.contains(kind));let a=find('array');if(!a)a=this.addLabel('5-CH RX · KRAKENSDR',this.rx,'array');a.pos=this.array.position.clone().add(new T.Vector3(0,.14,0));let ap=find('apogee');if(!ap)ap=this.addLabel('APOGEE · 3,000 m',apos,'apogee');ap.pos=apos.clone().add(new T.Vector3(0,.12,0));
     this.select(this.selected);this.makeLobe();if(refit)this.reset();
   }
-  select(f:number,force=false){this.selected=f;if(!this.m)return;const r=this.m.sample(f);const pos=world(r[C.x],r[C.y],r[C.z]);this.rocket.position.copy(pos);let direction=new T.Vector3(Math.sin(this.p.zenith*Math.PI/180),Math.cos(this.p.zenith*Math.PI/180),0);if(this.p.attitude&&Math.hypot(r[C.vx],r[C.vy],r[C.vz])>1)direction=world(r[C.vx],r[C.vy],r[C.vz]).normalize();this.rocket.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),direction);this.rocket.getObjectByName('flame')!.visible=!!r[C.burning];
+  select(f:number,force=false){this.selected=f;if(!this.m)return;const r=this.m.sample(f);const pos=world(r[C.x],r[C.y],r[C.z]);this.rocket.position.copy(pos);let direction=new T.Vector3(Math.sin(this.p.zenith*Math.PI/180),Math.cos(this.p.zenith*Math.PI/180),0);if(this.p.attitude&&Math.hypot(r[C.vx],r[C.vy],r[C.vz])>1)direction=world(r[C.vx],r[C.vy],r[C.vz]).normalize();this.rocket.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),direction);this.rocket.getObjectByName('flame')!.visible=!!r[C.burning];const axis=new T.Vector3(direction.x,-direction.z,direction.y);const basis=directionBasis(axis);const convert=(v:T.Vector3)=>new T.Vector3(v.x,v.z,-v.y);this.txBeam.position.copy(pos).add(direction.clone().multiplyScalar(.065+this.p.txAxial*(.04/(this.m.meta[H.lambda]/2))));this.txBeam.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(convert(basis.u),convert(basis.v),direction));this.txBeam.rotateZ(this.p.roll*Math.PI/180);
     const attr=this.beam.geometry.getAttribute('position');attr.setXYZ(1,pos.x,pos.y,pos.z);attr.needsUpdate=true;this.beam.geometry.computeBoundingSphere();
     (this.beam.material as T.LineBasicMaterial).color.setHex(r[C.margin]>=0?teal:0xf18379);
     if(this.p.tracking)this.buildArrayBeam();
   }
+  buildTxBeam(){disposeGroup(this.txBeam);const geo=patternGeometry((theta,phi)=>this.m.tx(theta,phi,this.p),this.m.meta[H.txPeak],.45);this.txBeam.add(new T.Mesh(geo,new T.MeshBasicMaterial({color:orange,side:T.DoubleSide,transparent:true,opacity:.16,depthWrite:false})));this.txBeam.add(new T.Mesh(geo.clone(),new T.MeshBasicMaterial({color:orange,wireframe:true,transparent:true,opacity:.07,depthWrite:false})));}
   rxFrame(){const ref=this.m.sample(this.m.meta[H.aim]);const n=new T.Vector3(ref[C.x]-this.m.meta[H.rxX],ref[C.y]-this.m.meta[H.rxY],ref[C.z]-this.m.meta[H.rxZ]).normalize();const helper=Math.abs(n.z)>.95?new T.Vector3(0,1,0):new T.Vector3(0,0,1);const u=helper.clone().cross(n).normalize(),v=n.clone().cross(u).normalize();const conv=(d:T.Vector3)=>new T.Vector3(d.x,d.z,-d.y);return {u:conv(u),v:conv(v),n:conv(n)};}
   closeup(){const target=this.array.position.clone();this.controls.target.copy(target);this.camera.position.copy(target).add(this.normal.clone().multiplyScalar(.8)).add(new T.Vector3(.32,.23,.3));this.controls.update();}
   buildSingleBeam(){disposeGroup(this.singleBeam);const frame=this.rxFrame();const reference=this.m.sample(this.m.meta[H.aim]);const length=Math.max(.4,reference[C.range]/1000);const ring:T.Vector3[]=[];for(let i=0;i<64;i++){const a=i*Math.PI/32;ring.push(this.array.position.clone().add(frame.n.clone().multiplyScalar(length)).add(frame.u.clone().multiplyScalar(length*Math.cos(a))).add(frame.v.clone().multiplyScalar(length*Math.sin(a))));}beamVolume(this.singleBeam,this.array.position,ring,0xb6c4ce,.027);}
