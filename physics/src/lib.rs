@@ -166,7 +166,7 @@ thread_local!{ static OUTPUT:RefCell<Vec<f64>>=const {RefCell::new(Vec::new())};
 #[no_mangle]
 pub extern "C" fn calculate(rx_spacing:f64,tx_spacing:f64,power_mw:f64,zenith:f64,aim:f64,temperature:f64,rate:f64,offset:f64,loss:f64,reserve:f64,tracking:i32,velocity_attitude:i32,roll:f64) {
     let config=Config {
-        rx_spacing:bounded(rx_spacing,0.5,1.0,0.5),tx_spacing:bounded(tx_spacing,0.05,1.0,0.35),power_mw:bounded(power_mw,1.0,500.0,25.0),zenith:bounded(zenith,0.0,60.0,20.0),aim:bounded(aim,-1.0,1.0,0.38),temperature:bounded(temperature,100.0,10000.0,273.0),rate:bounded(rate,18.3,37500.0,2400.0),offset:bounded(offset,100.0,2000.0,300.0),loss:bounded(loss,0.0,15.0,2.0),reserve:bounded(reserve,0.0,15.0,3.0),tracking:tracking!=0,velocity_attitude:velocity_attitude!=0,roll:bounded(roll,0.0,120.0,0.0),
+        rx_spacing:bounded(rx_spacing,0.5,2.0,0.5),tx_spacing:bounded(tx_spacing,0.05,1.0,0.35),power_mw:bounded(power_mw,1.0,500.0,25.0),zenith:bounded(zenith,0.0,60.0,20.0),aim:bounded(aim,-1.0,1.0,0.38),temperature:bounded(temperature,100.0,10000.0,273.0),rate:bounded(rate,18.3,37500.0,2400.0),offset:bounded(offset,100.0,2000.0,300.0),loss:bounded(loss,0.0,15.0,2.0),reserve:bounded(reserve,0.0,15.0,3.0),tracking:tracking!=0,velocity_attitude:velocity_attitude!=0,roll:bounded(roll,0.0,120.0,0.0),
     };
     let output=simulate(config);OUTPUT.with(|v|*v.borrow_mut()=output);
 }
@@ -174,6 +174,16 @@ pub extern "C" fn calculate(rx_spacing:f64,tx_spacing:f64,power_mw:f64,zenith:f6
 #[no_mangle]pub extern "C" fn output_len()->usize {OUTPUT.with(|v|v.borrow().len())}
 #[no_mangle]pub extern "C" fn tx_pattern(theta:f64,phi:f64,spacing:f64,normalization:f64)->f64 {db(tx_raw(theta,phi,spacing)/normalization)}
 /// Local patch plane basis, normal at +z. steer_x/z parameterize an elevation cut.
+/// Array-only SNR gain; does not include the element envelope.
+#[no_mangle]pub extern "C" fn rx_array_factor(theta:f64,phi:f64,spacing:f64,sx:f64,sy:f64,sz:f64)->f64 {
+    let d=V(theta.sin()*phi.cos(),theta.sin()*phi.sin(),theta.cos());
+    let a=2.0*PI*spacing*(d.0-sx);let b=2.0*PI*spacing*(d.1-sy);
+    db((1.0+2.0*a.cos()+2.0*b.cos()).powi(2)/5.0)
+}
+#[no_mangle]pub extern "C" fn single_dipole(theta:f64)->f64 {
+    let sint=theta.sin();if sint.abs()<1e-8{return -150.0;}
+    db(1.640922*(0.5*PI*theta.cos()).cos().powi(2)/(sint*sint))
+}
 #[no_mangle]pub extern "C" fn rx_pattern(theta:f64,phi:f64,spacing:f64,steer_x:f64,steer_y:f64,steer_z:f64,beam:i32)->f64 {
     let d=V(theta.sin()*phi.cos(),theta.sin()*phi.sin(),theta.cos());let patch=patch_power(d.2);
     if beam==0 {return db(patch);}
@@ -190,6 +200,29 @@ pub extern "C" fn calculate(rx_spacing:f64,tx_spacing:f64,power_mw:f64,zenith:f6
     #[test]fn tx_nulls_and_normalization(){assert_eq!(tx_raw(0.0,0.0,0.5),0.0);assert_eq!(tx_raw(PI,0.0,0.5),0.0);let (_,peak)=tx_normalization(0.0001);assert!((peak-2.15).abs()<0.04);for spacing in [0.05,0.5,1.0]{let (n,_)=tx_normalization(spacing);let mut mean=0.0;for t in 0..160{let theta=PI*(t as f64+0.5)/160.0;for p in 0..200{mean+=tx_raw(theta,2.0*PI*(p as f64+0.5)/200.0,spacing)/n*theta.sin();}}mean*=PI/(2.0*160.0*200.0);assert!((mean-1.0).abs()<0.001);}}
     #[test]fn power_and_noise_deltas(){let c=Config::default();let a=simulate(c);let b=simulate(Config{power_mw:50.0,..c});let d=simulate(Config{temperature:546.0,..c});assert!((b[11]-a[11]-3.0102999566).abs()<1e-7);assert!((d[11]-a[11]+3.0102999566).abs()<1e-7);}
     #[test]fn tracking_and_aim_maximize_gain(){let c=Config{tracking:true,..Config::default()};let o=simulate(c);for row in o[HEADER..].chunks(COLS){assert!((row[12]-row[11]-db(5.0)).abs()<1e-8);}let f=Flight::new(c.zenith);let n=f.at(f.end*c.aim).p.sub(V(-c.offset,150.0,2.0)).unit();assert!((db(patch_power(n.dot(n)))-5.5).abs()<1e-8);}
+    #[test]fn triangular_array_has_longitudinal_interference_nulls(){
+        // For phi=90deg, AF = (1 + 2*cos(pi*d*sin(theta)))^2/3.
+        // At d=lambda, theta=asin(2/3) cancels all three fields, away from the axial dipole null.
+        let theta=(2.0_f64/3.0).asin();assert!(tx_raw(theta,PI/2.0,1.0)<1e-25);
+        assert!(single_dipole(theta)>-5.0);
+        let (n,_)=tx_normalization(1.0);assert!(tx_pattern(theta,PI/2.0,1.0,n)<-140.0);
+        assert!(tx_pattern(theta,0.0,1.0,n)>-10.0);
+    }
+    #[test]fn patch_envelope_has_no_array_nulls(){
+        let d=1.0;let theta=((-0.25_f64).acos()/(2.0*PI*d/2.0_f64.sqrt())).asin();
+        assert!(rx_pattern(theta,PI/4.0,d,0.0,0.0,1.0,1)<-140.0);
+        assert!(rx_pattern(theta,PI/4.0,d,0.0,0.0,1.0,0)>3.0);
+        let halfwidth=PI/4.0;assert!((rx_pattern(halfwidth,0.0,d,0.0,0.0,1.0,0)-5.5+3.0102999566).abs()<1e-7);
+    }
+    #[test]fn grating_lobe_at_two_wavelength_spacing(){
+        // Replica at sin(theta)=lambda/d, equal AF but element attenuation remains.
+        let theta=(0.5_f64).asin();let af=rx_array_factor(theta,0.0,2.0,0.0,0.0,1.0);
+        assert!((af-db(5.0)).abs()<1e-8);
+        let gain=rx_pattern(theta,0.0,2.0,0.0,0.0,1.0,1);
+        assert!((gain-(5.5+db(5.0)+db(0.75))).abs()<1e-8);
+        let halfway=rx_array_factor((0.25_f64).asin(),0.0,2.0,0.0,0.0,1.0);
+        assert!(halfway<af-10.0);
+    }
     #[test]fn lora_rate_requirement(){for rate in [18.3,100.0,2400.0,10000.0,37500.0]{let m=modem(rate,273.0,3.0);assert!(m.rate>=rate);assert!(m.sensitivity.is_finite());}}
     #[test]fn optimizer_improves_worst_margin(){let c=Config::default();let a=simulate(c);let b=simulate(Config{aim:-1.0,..c});assert!(b[12]>=a[12]-0.05);assert!((0.0..=1.0).contains(&b[10]));}
 }
