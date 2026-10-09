@@ -41,7 +41,7 @@ export class Mission {
   makeRocket(){const body=mesh(new T.CylinderGeometry(.013,.013,.105,12),0xe4efed);this.rocket.add(body);const nose=mesh(new T.ConeGeometry(.013,.04,12),0xffaf7d);nose.position.y=.072;this.rocket.add(nose);for(let i=0;i<3;i++){const phi=2*Math.PI*i/3;const fin=mesh(new T.BoxGeometry(.034,.025,.003),0x7498a5);fin.position.set(.016*Math.cos(phi),-.044,.016*Math.sin(phi));fin.rotation.y=-phi;this.rocket.add(fin);const dipole=line([new T.Vector3(.022*Math.cos(phi),.045,.022*Math.sin(phi)),new T.Vector3(.022*Math.cos(phi),.085,.022*Math.sin(phi))],0xffbd8e);this.rocket.add(dipole);}
     const flame=new T.Mesh(new T.ConeGeometry(.013,.09,8),new T.MeshBasicMaterial({color:orange,transparent:true,opacity:.75}));flame.name='flame';flame.rotation.z=Math.PI;flame.position.y=-.098;this.rocket.add(flame);
   }
-  build(m:Model,p:Parameters){this.m=m;this.p={...p};disposeGroup(this.dynamic);disposeGroup(this.array);this.rx=world(m.meta[H.rxX],m.meta[H.rxY],m.meta[H.rxZ]);const ref=m.sample(m.meta[H.aim]);const refpos=world(ref[C.x],ref[C.y],ref[C.z]);this.normal=refpos.clone().sub(this.rx).normalize();
+  build(m:Model,p:Parameters){const refit=!this.m||this.p.zenith!==p.zenith;this.m=m;this.p={...p};disposeGroup(this.dynamic);disposeGroup(this.array);this.rx=world(m.meta[H.rxX],m.meta[H.rxY],m.meta[H.rxZ]);const ref=m.sample(m.meta[H.aim]);const refpos=world(ref[C.x],ref[C.y],ref[C.z]);this.normal=refpos.clone().sub(this.rx).normalize();
     const geo=new T.BufferGeometry().setFromPoints(m.rows.map(r=>world(r[C.x],r[C.y],r[C.z])));const colors=new Float32Array(m.rows.length*3);m.rows.forEach((r,i)=>{const col=new T.Color(r[C.burning]?orange:r[C.margin]<0?0xf18379:teal);colors.set([col.r,col.g,col.b],i*3);});geo.setAttribute('color',new T.BufferAttribute(colors,3));this.trajectory=new T.Line(geo,new T.LineBasicMaterial({vertexColors:true}));this.dynamic.add(this.trajectory);
     const groundpath=m.rows.filter((_,i)=>i%5===0).map(r=>world(r[C.x],r[C.y],3));const shadow=new T.Line(new T.BufferGeometry().setFromPoints(groundpath),new T.LineDashedMaterial({color:0x4a7180,dashSize:.025,gapSize:.04,transparent:true,opacity:.5}));shadow.computeLineDistances();this.dynamic.add(shadow);
     for(let i=1;i<=3;i++){const alt=line([new T.Vector3(-.08,i,0),new T.Vector3(.08,i,0)],0x406673,.5);this.dynamic.add(alt);}
@@ -53,7 +53,7 @@ export class Mission {
     const distance=.052*p.rxSpacing/.5;for(const [x,z] of [[0,0],[distance,0],[-distance,0],[0,distance],[0,-distance]]){const patch=mesh(new T.BoxGeometry(.041,.008,.041),0xd7b779);patch.position.set(x,.009,z);this.array.add(patch);}
     this.array.position.copy(this.rx);this.array.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),this.normal);const mast=mesh(new T.CylinderGeometry(.006,.006,.065,8),0x5b8290);mast.position.copy(this.rx).add(new T.Vector3(0,-.024,0));this.dynamic.add(mast);
     const find=(kind:string)=>this.labels.find(l=>l.el.classList.contains(kind));let a=find('array');if(!a)a=this.addLabel('5-CH RX · KRAKENSDR',this.rx,'array');a.pos=this.rx.clone().add(new T.Vector3(0,.12,0));let ap=find('apogee');if(!ap)ap=this.addLabel('APOGEE · 3,000 m',apos,'apogee');ap.pos=apos.clone().add(new T.Vector3(0,.12,0));
-    this.select(this.selected);this.makeLobe();
+    this.select(this.selected);this.makeLobe();if(refit)this.reset();
   }
   select(f:number){this.selected=f;if(!this.m)return;const r=this.m.sample(f);const pos=world(r[C.x],r[C.y],r[C.z]);this.rocket.position.copy(pos);let direction=new T.Vector3(Math.sin(this.p.zenith*Math.PI/180),Math.cos(this.p.zenith*Math.PI/180),0);if(this.p.attitude&&Math.hypot(r[C.vx],r[C.vy],r[C.vz])>1)direction=world(r[C.vx],r[C.vy],r[C.vz]).normalize();this.rocket.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),direction);this.rocket.getObjectByName('flame')!.visible=!!r[C.burning];
     const attr=this.beam.geometry.getAttribute('position');attr.setXYZ(1,pos.x,pos.y,pos.z);attr.needsUpdate=true;this.beam.geometry.computeBoundingSphere();
@@ -65,8 +65,9 @@ export class Mission {
     // Pattern coordinates use x/y in the patch plane and z along its normal.
     const ref=this.m.sample(this.m.meta[H.aim]);const n=new T.Vector3(ref[C.x]-this.m.meta[H.rxX],ref[C.y]-this.m.meta[H.rxY],ref[C.z]-this.m.meta[H.rxZ]).normalize();const helper=Math.abs(n.z)>.95?new T.Vector3(0,1,0):new T.Vector3(0,0,1);const u=helper.clone().cross(n).normalize(),v=n.clone().cross(u).normalize();const conv=(d:T.Vector3)=>new T.Vector3(d.x,d.z,-d.y);const matrix=new T.Matrix4().makeBasis(conv(u),conv(v),conv(n));body.quaternion.setFromRotationMatrix(matrix);this.lobe.add(body);
   }
-  reset(){this.camera.position.set(5.8,4.1,6.4);this.controls.target.set(.6,1.2,0);this.controls.update();}
-  side(){this.camera.position.set(1.3,2.6,8.5);this.controls.target.set(1.3,1.3,0);this.controls.update();}
+  fit(direction:T.Vector3){if(!this.m)return;const bounds=new T.Box3().setFromPoints([...this.m.rows.map(r=>world(r[C.x],r[C.y],r[C.z])),this.rx]);const sphere=bounds.getBoundingSphere(new T.Sphere());const vFov=this.camera.fov*Math.PI/180;const hFov=2*Math.atan(Math.tan(vFov/2)*this.camera.aspect);const distance=sphere.radius/Math.sin(Math.min(vFov,hFov)/2)*1.15;this.controls.target.copy(sphere.center);this.camera.position.copy(sphere.center).add(direction.normalize().multiplyScalar(distance));this.controls.maxDistance=Math.max(25,distance*3);this.controls.update();}
+  reset(){this.fit(new T.Vector3(.6,.38,.75));}
+  side(){this.fit(new T.Vector3(0,.06,1));}
 }
 function patternGeometry(gain:(theta:number,phi:number)=>number,peak:number,scale=1,powerRadius=false){
   const nt=64,np=96;const pos:number[]=[],colors:number[]=[],indices:number[]=[];
