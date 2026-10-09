@@ -175,7 +175,7 @@ pub extern "C" fn calculate(rx_spacing:f64,tx_spacing:f64,power_mw:f64,zenith:f6
 #[no_mangle]pub extern "C" fn tx_pattern(theta:f64,phi:f64,spacing:f64,normalization:f64)->f64 {db(tx_raw(theta,phi,spacing)/normalization)}
 /// Local patch plane basis, normal at +z. steer_x/z parameterize an elevation cut.
 /// Array-only SNR gain; does not include the element envelope.
-#[no_mangle]pub extern "C" fn rx_array_factor(theta:f64,phi:f64,spacing:f64,sx:f64,sy:f64,sz:f64)->f64 {
+#[no_mangle]pub extern "C" fn rx_array_factor(theta:f64,phi:f64,spacing:f64,sx:f64,sy:f64,_sz:f64)->f64 {
     let d=V(theta.sin()*phi.cos(),theta.sin()*phi.sin(),theta.cos());
     let a=2.0*PI*spacing*(d.0-sx);let b=2.0*PI*spacing*(d.1-sy);
     db((1.0+2.0*a.cos()+2.0*b.cos()).powi(2)/5.0)
@@ -205,12 +205,12 @@ pub extern "C" fn calculate(rx_spacing:f64,tx_spacing:f64,power_mw:f64,zenith:f6
         // At d=lambda, theta=asin(2/3) cancels all three fields, away from the axial dipole null.
         let theta=(2.0_f64/3.0).asin();assert!(tx_raw(theta,PI/2.0,1.0)<1e-25);
         assert!(single_dipole(theta)>-5.0);
-        let (n,_)=tx_normalization(1.0);assert!(tx_pattern(theta,PI/2.0,1.0,n)<-140.0);
+        let (n,_)=tx_normalization(1.0);assert!(tx_pattern(theta,PI/2.0,1.0,n)< -140.0);
         assert!(tx_pattern(theta,0.0,1.0,n)>-10.0);
     }
     #[test]fn patch_envelope_has_no_array_nulls(){
         let d=1.0;let theta=((-0.25_f64).acos()/(2.0*PI*d/2.0_f64.sqrt())).asin();
-        assert!(rx_pattern(theta,PI/4.0,d,0.0,0.0,1.0,1)<-140.0);
+        assert!(rx_pattern(theta,PI/4.0,d,0.0,0.0,1.0,1)< -140.0);
         assert!(rx_pattern(theta,PI/4.0,d,0.0,0.0,1.0,0)>3.0);
         let halfwidth=PI/4.0;assert!((rx_pattern(halfwidth,0.0,d,0.0,0.0,1.0,0)-5.5+3.0102999566).abs()<1e-7);
     }

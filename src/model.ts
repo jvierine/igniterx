@@ -4,7 +4,7 @@ export interface Parameters {
   temperature:number; rate:number; offset:number; loss:number; reserve:number;
   tracking:boolean; attitude:boolean; roll:number;
 }
-export const defaults:Parameters={rxSpacing:0.5,txSpacing:0.35,power:25,zenith:20,aim:0.38,temperature:273,rate:2400,offset:300,loss:2,reserve:3,tracking:false,attitude:false,roll:0};
+export const defaults:Parameters={rxSpacing:0.5,txSpacing:0.35,power:25,zenith:20,aim:0.38,temperature:273,rate:2400,offset:300,loss:2,reserve:3,tracking:true,attitude:false,roll:0};
 export const H={version:0,count:1,cols:2,burn:3,apogeeT:4,duration:5,ve:6,mdot:7,tilt:8,azimuth:9,aim:10,mean:11,worst:12,best:13,availability:14,meanSingle:15,worstSingle:16,lambda:17,sf:18,bw:19,rate:20,snr:21,sensitivity:22,noise:23,power:24,txPeak:25,rxX:26,rxY:27,rxZ:28,txNorm:29,rxD:30,txD:31,apogee:32,reserve:33} as const;
 export const C={time:0,x:1,y:2,z:3,vx:4,vy:5,vz:6,mass:7,burning:8,range:9,tx:10,rxSingle:11,rx:12,fspl:13,prSingle:14,pr:15,noise:16,sensitivity:17,marginSingle:18,margin:19,doppler:20,offAxis:21} as const;
 interface Exports {rx_array_factor:(theta:number,phi:number,spacing:number,sx:number,sy:number,sz:number)=>number;single_dipole:(theta:number)=>number;memory:WebAssembly.Memory; calculate:(...args:number[])=>void;output_ptr:()=>number;output_len:()=>number;tx_pattern:(theta:number,phi:number,spacing:number,norm:number)=>number;rx_pattern:(theta:number,phi:number,spacing:number,sx:number,sy:number,sz:number,beam:number)=>number;}
